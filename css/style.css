@@ -264,29 +264,34 @@ textarea { resize: vertical; }
   color: var(--ink);
   max-width: 210mm;
   margin: 0 auto 40px;
-  padding: 14mm 12mm;
+  padding: 12mm 10mm;
   box-shadow: 0 2px 12px rgba(0, 0, 0, .15);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.4;
 }
-.sheet.exporting { box-shadow: none; padding: 0; max-width: 190mm; }
-.sheet-head { display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 2px solid var(--ink); padding-bottom: 6px; margin-bottom: 10px; }
-.sheet-head h2 { margin: 0; font-size: 22px; letter-spacing: .3em; }
-.sheet-created { font-size: 11px; }
+/* PDFダウンロード時：画面幅に関係なくA4幅（余白10mm）のPC用レイアウトで描く */
+.sheet.exporting { box-shadow: none; padding: 0; margin: 0; width: 190mm; max-width: none; overflow: visible; }
+.sheet.exporting .sheet-stats { grid-template-columns: repeat(5, 1fr); }
+.sheet.exporting .sheet-stats > div { border-top: 0; border-left: 1px solid var(--line); }
+.sheet.exporting .sheet-stats > div:first-child { border-left: 0; }
+.sheet.exporting .two-col { grid-template-columns: 1fr 1fr; }
+.sheet-head { display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 2px solid var(--ink); padding-bottom: 4px; margin-bottom: 6px; }
+.sheet-head h2 { margin: 0; font-size: 19px; letter-spacing: .3em; }
+.sheet-created { font-size: 10px; }
 .sheet h3 {
-  font-size: 13px;
-  margin: 14px 0 5px;
+  font-size: 12px;
+  margin: 8px 0 3px;
   padding-left: 7px;
   border-left: 4px solid #2f6b4f;
   break-after: avoid;
   page-break-after: avoid;
 }
 .sheet table { width: 100%; border-collapse: collapse; }
-.sheet th, .sheet td { border: 1px solid var(--line); padding: 3px 6px; vertical-align: top; }
+.sheet th, .sheet td { border: 1px solid var(--line); padding: 1px 5px; vertical-align: top; }
 .sheet th { background: var(--head); font-weight: 600; text-align: left; }
-.sheet .kv th { width: 8.5em; white-space: nowrap; }
-.sheet .kv { margin-top: 8px; }
-.sheet .big { font-size: 16px; }
+.sheet .kv th { width: 7.5em; white-space: nowrap; }
+.sheet .big { font-size: 14px; }
+.sheet h3 small { font-weight: 400; font-size: 10px; color: #555; margin-left: 6px; }
 .sheet .grid-table thead th { text-align: center; white-space: nowrap; }
 .sheet .cal th { width: 10em; white-space: nowrap; }
 .sheet .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -298,21 +303,20 @@ textarea { resize: vertical; }
   border: 1px solid var(--line);
   break-inside: avoid;
 }
-.sheet-stats > div { padding: 5px 6px; border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+.sheet-stats > div { padding: 3px 6px; border-left: 1px solid var(--line); display: flex; flex-direction: column; }
 .sheet-stats > div:first-child { border-left: 0; }
 .sheet-stats span { font-size: 10px; color: #444; }
-.sheet-stats b { font-size: 14px; }
+.sheet-stats b { font-size: 13px; }
 .sheet-stats em { font-style: normal; font-size: 10px; color: #444; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.equip { margin: 0; padding: 5px 6px; border: 1px solid var(--line); }
-.sheet-foot { font-size: 10px; color: #444; margin: 10px 0 0; }
+.sheet-foot { font-size: 9px; color: #444; margin: 6px 0 0; }
 .sheet .profile {
   --chart-line: #2f6b4f;
   --chart-ink: #555;
   --chart-grid: #ddd;
   --chart-surface: #fff;
   border: 1px solid var(--line);
-  padding: 4px 6px 2px;
+  padding: 2px 4px 0;
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -345,8 +349,6 @@ textarea { resize: vertical; }
     box-shadow: none;
     margin: 0;
     padding: 0;
-    font-size: 11px;
-    line-height: 1.4;
     max-width: none;
     overflow: visible;
     -webkit-print-color-adjust: exact;
@@ -356,6 +358,4 @@ textarea { resize: vertical; }
   .sheet-stats > div { border-top: 0; border-left: 1px solid var(--line); }
   .sheet-stats > div:first-child { border-left: 0; }
   .two-col { grid-template-columns: 1fr 1fr; }
-  .sheet th, .sheet td { padding: 2px 5px; }
-  .sheet h3 { margin: 10px 0 4px; }
 }
