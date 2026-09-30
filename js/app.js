@@ -227,6 +227,151 @@
     };
   }
 
+  // ---------- elevation profile ----------
+  function profileData(p) {
+    const pts = (p.route || []).filter(r => num(r.elevation) != null);
+    if (pts.length < 2) return null;
+    const timed = pts.every(r => toMinutes(r.time) != null);
+    let x = 0;
+    const out = pts.map((r, i) => {
+      const day = num(r.day) || 1;
+      if (i > 0) {
+        const prev = pts[i - 1];
+        if (!timed) x += 1;
+        else if ((num(prev.day) || 1) === day) {
+          let d = toMinutes(r.time) - toMinutes(prev.time);
+          if (d < 0) d += 24 * 60;
+          x += d;
+        }
+        // 日が変わったら経過時間は前日の到着時点から継続
+      }
+      return { x, elev: num(r.elevation), place: r.place || '', time: r.time || '', day };
+    });
+    return { pts: out, timed };
+  }
+
+  function niceStep(range) {
+    const steps = [50, 100, 200, 250, 500, 1000];
+    return steps.find(s => range / s <= 5) || 1000;
+  }
+
+  // 標高グラフ（SVG文字列）。色はCSS変数 --chart-line で指定
+  function profileSVG(p, width) {
+    const data = profileData(p);
+    if (!data) return '<p class="profile-empty">行程に標高を2地点以上入力すると、標高グラフが表示されます。</p>';
+    const { pts, timed } = data;
+    const W = Math.round(Math.max(320, width || 720));
+    const H = W < 520 ? 210 : 240, L = 50, R = 16, T = 26, B = 34;
+    const elevs = pts.map(d => d.elev);
+    let min = Math.min(...elevs), max = Math.max(...elevs);
+    const step = niceStep(Math.max(max - min, 1));
+    let yMin = Math.floor(min / step) * step;
+    let yMax = Math.ceil(max / step) * step;
+    if (yMax - max < step * 0.25) yMax += step; // 最高点ラベルの余白
+    if (yMin === yMax) yMax += step;
+    const xMax = pts[pts.length - 1].x || 1;
+    const sx = v => L + (v / xMax) * (W - L - R);
+    const sy = v => T + (1 - (v - yMin) / (yMax - yMin)) * (H - T - B);
+
+    const grid = [];
+    for (let v = yMin; v <= yMax; v += step) {
+      grid.push(`<line class="ep-grid" x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}"/>` +
+        `<text class="ep-tick" x="${L - 6}" y="${sy(v) + 4}" text-anchor="end">${fmt(v)}</text>`);
+    }
+
+    const xt = [];
+    if (timed) {
+      const maxTicks = Math.max(3, Math.floor((W - L - R) / 56));
+      const hStep = [1, 2, 3, 4, 6, 12, 24].find(h => xMax / (h * 60) <= maxTicks) || 24;
+      for (let m = 0; m <= xMax + 1; m += hStep * 60) {
+        xt.push(`<text class="ep-tick" x="${sx(m)}" y="${H - B + 16}" text-anchor="middle">${m / 60}h</text>`);
+      }
+    }
+
+    // 日の区切り
+    const days = [];
+    pts.forEach((d, i) => {
+      if (i > 0 && d.day !== pts[i - 1].day) {
+        const xx = sx(d.x);
+        days.push(`<line class="ep-day" x1="${xx}" x2="${xx}" y1="${T - 8}" y2="${H - B}"/>` +
+          `<text class="ep-daylabel" x="${xx + 4}" y="${T - 12}">${esc(d.day)}日目</text>`);
+      }
+    });
+
+    const line = pts.map((d, i) => `${i ? 'L' : 'M'}${sx(d.x).toFixed(1)},${sy(d.elev).toFixed(1)}`).join('');
+    const area = `${line}L${sx(xMax)},${H - B}L${sx(0)},${H - B}Z`;
+    const dots = pts.map(d => `<circle class="ep-dot" cx="${sx(d.x)}" cy="${sy(d.elev)}" r="4"/>`).join('');
+
+    const top = pts.reduce((a, b) => (b.elev > a.elev ? b : a));
+    const tx = sx(top.x);
+    const anchor = tx < L + 80 ? 'start' : tx > W - R - 80 ? 'end' : 'middle';
+    const topLabel = `<text class="ep-label" x="${tx}" y="${sy(top.elev) - 10}" text-anchor="${anchor}">${esc(top.place)} ${fmt(top.elev)}m</text>`;
+
+    const hover = pts.map(d => ({ x: sx(d.x), y: sy(d.elev), place: d.place, elev: d.elev, time: d.time, day: d.day }));
+
+    return `<svg class="ep" viewBox="0 0 ${W} ${H}" role="img" aria-label="標高グラフ：最低${fmt(min)}m、最高${fmt(max)}m、高低差${fmt(max - min)}m" data-points='${esc(JSON.stringify(hover))}'>
+      ${grid.join('')}
+      <line class="ep-axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>
+      ${xt.join('')}
+      <text class="ep-unit" x="${L - 6}" y="${T - 12}" text-anchor="end">標高(m)</text>
+      ${timed ? `<text class="ep-unit" x="${W - R}" y="${H - 4}" text-anchor="end">経過時間</text>` : ''}
+      ${days.join('')}
+      <path class="ep-area" d="${area}"/>
+      <path class="ep-line" d="${line}"/>
+      ${dots}
+      ${topLabel}
+      <line class="ep-cross" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
+      <circle class="ep-focus" r="6" visibility="hidden"/>
+    </svg><div class="ep-tip" hidden></div>`;
+  }
+
+  // ホバーでその地点の名前・標高・時刻を表示
+  function attachProfileHover(box) {
+    const svg = $('svg.ep', box);
+    if (!svg) return;
+    const pts = JSON.parse(svg.dataset.points);
+    const tip = $('.ep-tip', box), cross = $('.ep-cross', svg), focus = $('.ep-focus', svg);
+    const hide = () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); focus.setAttribute('visibility', 'hidden'); };
+    const move = e => {
+      const rect = svg.getBoundingClientRect();
+      const vb = svg.viewBox.baseVal;
+      const cx = e.clientX !== undefined ? e.clientX : e.touches[0].clientX;
+      const x = (cx - rect.left) * (vb.width / rect.width);
+      const d = pts.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a));
+      cross.setAttribute('x1', d.x); cross.setAttribute('x2', d.x); cross.setAttribute('visibility', 'visible');
+      focus.setAttribute('cx', d.x); focus.setAttribute('cy', d.y); focus.setAttribute('visibility', 'visible');
+      tip.innerHTML = `<b>${esc(d.place || '（地点名なし）')}</b><span>${fmt(d.elev)} m</span>` +
+        `<span class="muted">${esc(d.day)}日目${d.time ? ' ' + esc(d.time) : ''}</span>`;
+      tip.hidden = false;
+      const px = d.x * rect.width / vb.width, py = d.y * rect.height / vb.height;
+      const left = Math.min(Math.max(px - tip.offsetWidth / 2, 0), rect.width - tip.offsetWidth);
+      tip.style.left = `${left}px`;
+      tip.style.top = `${Math.max(py - tip.offsetHeight - 12, 0)}px`;
+    };
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerdown', move);
+    svg.addEventListener('pointerleave', hide);
+  }
+
+  function renderProfile(box, p) {
+    // 画面幅に合わせて描き直し、スマホでも文字が小さくならないようにする
+    box.innerHTML = profileSVG(p, box.clientWidth);
+    attachProfileHover(box);
+  }
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const p = current();
+      if (!p) return;
+      ['#profile-edit', '#profile-sheet'].forEach(sel => {
+        const box = $(sel);
+        if (box && box.offsetParent) renderProfile(box, p);
+      });
+    }, 150);
+  });
+
   // ---------- state ----------
   let plans = loadPlans();
   let currentId = null;
@@ -425,6 +570,7 @@
     });
 
     $('#summary').innerHTML = summaryHTML(c, p);
+    renderProfile($('#profile-edit'), p);
   }
 
   function summaryHTML(c, p) {
@@ -550,6 +696,9 @@
         <div><span>行動時間</span><b>${c.hours != null ? fmtHours(c.hours) : '—'}</b><em>${esc(dayBreakdown)}</em></div>
       </div>
 
+      <h3>標高グラフ</h3>
+      <div class="profile" id="profile-sheet"></div>
+
       <h3>行程表</h3>
       <table class="grid-table">
         <thead><tr><th style="width:4.5em">日程</th><th>地点</th><th style="width:6em">標高(m)</th><th style="width:5.5em">予定時刻</th><th>メモ</th></tr></thead>
@@ -603,6 +752,7 @@
 
       <p class="sheet-foot">※ 消費カロリーは山本正嘉氏の推定式、必要水分は 5mL × 体重(荷物込) × 行動時間 による概算です。</p>
     `;
+    renderProfile($('#profile-sheet'), p);
   }
 
   $('#btn-print').addEventListener('click', () => {
@@ -650,7 +800,7 @@
         image: { type: 'jpeg', quality: 0.96 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h3', '.sheet-stats'] },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h3', '.sheet-stats', '.profile'] },
       }).from(sheet).save();
       sheet.classList.remove('exporting');
     } catch (err) {

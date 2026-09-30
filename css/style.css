@@ -211,6 +211,50 @@ textarea { resize: vertical; }
 .stat.warn { background: var(--warn-soft); border-color: var(--warn); }
 .stat.warn .stat-value { color: var(--warn); }
 
+/* ---------- elevation profile ---------- */
+.chart-card { padding: 12px 16px; }
+.chart-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.chart-title small { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 6px; }
+@media (max-width: 720px) { .chart-title small { display: block; margin-left: 0; } }
+.profile {
+  --chart-line: var(--accent);
+  --chart-ink: var(--muted);
+  --chart-grid: var(--border);
+  --chart-surface: var(--surface);
+  position: relative;
+}
+.ep { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+.ep-grid { stroke: var(--chart-grid); stroke-width: 1; }
+.ep-axis { stroke: var(--chart-ink); stroke-width: 1; }
+.ep-tick, .ep-unit { fill: var(--chart-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+.ep-area { fill: var(--chart-line); opacity: .14; }
+.ep-line { fill: none; stroke: var(--chart-line); stroke-width: 2; stroke-linejoin: round; }
+.ep-dot { fill: var(--chart-line); stroke: var(--chart-surface); stroke-width: 2; }
+.ep-focus { fill: var(--chart-line); stroke: var(--chart-surface); stroke-width: 2; }
+.ep-label { fill: currentColor; font-size: 12px; font-weight: 700; }
+.ep-day { stroke: var(--chart-ink); stroke-width: 1; stroke-dasharray: 3 3; }
+.ep-daylabel { fill: var(--chart-ink); font-size: 11px; }
+.ep-cross { stroke: var(--chart-ink); stroke-width: 1; }
+.ep-tip {
+  position: absolute;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 2;
+}
+.ep-tip .muted { color: var(--muted); }
+.ep-tip[hidden] { display: none; }
+.profile-empty { color: var(--muted); font-size: 13px; margin: 8px 0; }
+
 /* ---------- sheet (always light, like paper) ---------- */
 .sheet {
   --ink: #111;
@@ -262,6 +306,18 @@ textarea { resize: vertical; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .equip { margin: 0; padding: 5px 6px; border: 1px solid var(--line); }
 .sheet-foot { font-size: 10px; color: #444; margin: 10px 0 0; }
+.sheet .profile {
+  --chart-line: #2f6b4f;
+  --chart-ink: #555;
+  --chart-grid: #ddd;
+  --chart-surface: #fff;
+  border: 1px solid var(--line);
+  padding: 4px 6px 2px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.sheet .ep-tip { background: #fff; color: #111; border-color: #ccc; }
+.sheet .ep-tip .muted { color: #555; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 720px) {
@@ -282,6 +338,7 @@ textarea { resize: vertical; }
   :root { color-scheme: light; }
   body { background: #fff; }
   .no-print, .app-header { display: none !important; }
+  .ep-tip, .ep-cross, .ep-focus { display: none !important; }
   main { max-width: none; padding: 0; }
   #view-sheet { display: block !important; }
   .sheet {
