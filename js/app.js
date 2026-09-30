@@ -256,12 +256,14 @@
   }
 
   // 標高グラフ（SVG文字列）。色はCSS変数 --chart-line で指定
-  function profileSVG(p, width) {
+  function profileSVG(p, width, compact) {
     const data = profileData(p);
     if (!data) return '<p class="profile-empty">行程に標高を2地点以上入力すると、標高グラフが表示されます。</p>';
     const { pts, timed } = data;
     const W = Math.round(Math.max(320, width || 720));
-    const H = W < 520 ? 210 : 240, L = 50, R = 16, T = 26, B = 34;
+    // compact: 計画書用に縦を詰めた版（単位は見出しに表示）
+    const H = compact ? Math.round(Math.min(Math.max(W * 0.18, 110), 135)) : (W < 520 ? 210 : 240);
+    const L = compact ? 40 : 50, R = compact ? 10 : 16, T = compact ? 20 : 26, B = compact ? 20 : 34;
     const elevs = pts.map(d => d.elev);
     let min = Math.min(...elevs), max = Math.max(...elevs);
     const step = niceStep(Math.max(max - min, 1));
@@ -284,7 +286,7 @@
       const maxTicks = Math.max(3, Math.floor((W - L - R) / 56));
       const hStep = [1, 2, 3, 4, 6, 12, 24].find(h => xMax / (h * 60) <= maxTicks) || 24;
       for (let m = 0; m <= xMax + 1; m += hStep * 60) {
-        xt.push(`<text class="ep-tick" x="${sx(m)}" y="${H - B + 16}" text-anchor="middle">${m / 60}h</text>`);
+        xt.push(`<text class="ep-tick" x="${sx(m)}" y="${H - B + 14}" text-anchor="middle">${m / 60}h</text>`);
       }
     }
 
@@ -294,7 +296,8 @@
       if (i > 0 && d.day !== pts[i - 1].day) {
         const xx = sx(d.x);
         days.push(`<line class="ep-day" x1="${xx}" x2="${xx}" y1="${T - 8}" y2="${H - B}"/>` +
-          `<text class="ep-daylabel" x="${xx + 4}" y="${T - 12}">${esc(d.day)}日目</text>`);
+          // compact時は最高地点ラベルと重ならないよう、日付ラベルを下側に置く
+          `<text class="ep-daylabel" x="${xx + 4}" y="${compact ? H - B - 4 : T - 12}">${esc(d.day)}日目</text>`);
       }
     });
 
@@ -309,12 +312,12 @@
 
     const hover = pts.map(d => ({ x: sx(d.x), y: sy(d.elev), place: d.place, elev: d.elev, time: d.time, day: d.day }));
 
-    return `<svg class="ep" viewBox="0 0 ${W} ${H}" role="img" aria-label="標高グラフ：最低${fmt(min)}m、最高${fmt(max)}m、高低差${fmt(max - min)}m" data-points='${esc(JSON.stringify(hover))}'>
+    return `<svg class="ep" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="標高グラフ：最低${fmt(min)}m、最高${fmt(max)}m、高低差${fmt(max - min)}m" data-points='${esc(JSON.stringify(hover))}'>
       ${grid.join('')}
       <line class="ep-axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>
       ${xt.join('')}
-      <text class="ep-unit" x="${L - 6}" y="${T - 12}" text-anchor="end">標高(m)</text>
-      ${timed ? `<text class="ep-unit" x="${W - R}" y="${H - 4}" text-anchor="end">経過時間</text>` : ''}
+      ${compact ? '' : `<text class="ep-unit" x="${L - 6}" y="${T - 12}" text-anchor="end">標高(m)</text>`}
+      ${timed && !compact ? `<text class="ep-unit" x="${W - R}" y="${H - 4}" text-anchor="end">経過時間</text>` : ''}
       ${days.join('')}
       <path class="ep-area" d="${area}"/>
       <path class="ep-line" d="${line}"/>
@@ -355,7 +358,9 @@
 
   function renderProfile(box, p) {
     // 画面幅に合わせて描き直し、スマホでも文字が小さくならないようにする
-    box.innerHTML = profileSVG(p, box.clientWidth);
+    // 計画書のグラフは紙の幅（A4・余白10mm＝約718px）で描き、画面では縮小表示する
+    const onSheet = box.id === 'profile-sheet';
+    box.innerHTML = profileSVG(p, onSheet ? 718 : box.clientWidth, onSheet);
     attachProfileHover(box);
   }
 
@@ -653,7 +658,8 @@
     const equipment = [...(p.equipment || [])];
     if (p.equipmentOther) equipment.push(p.equipmentOther);
 
-    const row = (th, td) => `<tr><th>${th}</th><td>${td}</td></tr>`;
+    const row = (th, td) => `<tr><th>${th}</th><td colspan="3">${td}</td></tr>`;
+    const row2 = (th1, td1, th2, td2) => `<tr><th>${th1}</th><td>${td1}</td><th>${th2}</th><td>${td2}</td></tr>`;
     const dash = v => (v === '' || v == null) ? '—' : esc(v);
 
     let prevDay = null;
@@ -668,8 +674,9 @@
       return `<tr><td>${esc(f.type)}</td><td>${esc(f.name)}</td><td class="num">${esc(f.qty)}</td><td class="num">${f.kcal !== '' ? fmt(num(f.kcal)) : ''}</td><td class="num">${sub ? fmt(sub) : ''}</td></tr>`;
     }).join('');
 
+    const hm = h => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
     const dayBreakdown = c.dayHours.length > 1
-      ? `（${c.dayHours.map(d => `${d.day}日目 ${fmtHours(d.hours)}`).join('、')}）` : '';
+      ? c.dayHours.map(d => `${d.day}日目 ${hm(d.hours)}`).join(' / ') : '';
 
     $('#sheet').innerHTML = `
       <header class="sheet-head">
@@ -678,11 +685,9 @@
       </header>
 
       <table class="kv">
-        ${row('山名', `<strong class="big">${dash(p.mountain)}</strong>${p.area ? `（${esc(p.area)}）` : ''}`)}
-        ${row('都道府県', dash(p.prefecture))}
+        ${row2('山名', `<strong class="big">${dash(p.mountain)}</strong>${p.area ? `（${esc(p.area)}）` : ''}`, '都道府県', dash(p.prefecture))}
         ${row('登山日', esc(dateRange(p)) + (p.dateReserve ? `　予備日：${esc(fmtDate(p.dateReserve))}` : ''))}
-        ${row('山行形態', dash(p.style))}
-        ${row('登山口', dash(p.trailhead))}
+        ${row2('山行形態', dash(p.style), '登山口', dash(p.trailhead))}
         ${row('交通手段', dash(p.access))}
         ${p.purpose ? row('目的', esc(p.purpose)) : ''}
       </table>
@@ -696,7 +701,7 @@
         <div><span>行動時間</span><b>${c.hours != null ? fmtHours(c.hours) : '—'}</b><em>${esc(dayBreakdown)}</em></div>
       </div>
 
-      <h3>標高グラフ</h3>
+      <h3>標高グラフ <small>縦軸：標高(m)　横軸：経過時間</small></h3>
       <div class="profile" id="profile-sheet"></div>
 
       <h3>行程表</h3>
@@ -740,13 +745,11 @@
         </div>
       </div>
 
-      <h3>装備</h3>
-      <p class="equip">${equipment.length ? equipment.map(esc).join('、') : '—'}</p>
-
+      <h3>装備・安全対策</h3>
       <table class="kv">
+        ${row('装備', equipment.length ? equipment.map(esc).join('、') : '—')}
         ${row('エスケープルート', dash(p.escape).replace(/\n/g, '<br>'))}
-        ${row('計画書提出先', dash(p.submitTo))}
-        ${row('山岳保険', dash(p.insurance))}
+        ${row2('計画書提出先', dash(p.submitTo), '山岳保険', dash(p.insurance))}
         ${p.notes ? row('備考', esc(p.notes).replace(/\n/g, '<br>')) : ''}
       </table>
 
@@ -794,20 +797,22 @@
       }
       const sheet = $('#sheet');
       sheet.classList.add('exporting');
+      // PDFの幅（190mm）に合わせてグラフを描き直す
+      renderProfile($('#profile-sheet'), p);
       await window.html2pdf().set({
         margin: [10, 10, 10, 10],
         filename: pdfName(p),
         image: { type: 'jpeg', quality: 0.96 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h3', '.sheet-stats', '.profile'] },
       }).from(sheet).save();
-      sheet.classList.remove('exporting');
     } catch (err) {
-      $('#sheet').classList.remove('exporting');
       alert('PDFの直接作成に失敗しました（オフラインの可能性があります）。印刷ダイアログから「PDFに保存」を選んでください。');
       window.print();
     } finally {
+      $('#sheet').classList.remove('exporting');
+      renderProfile($('#profile-sheet'), p);
       btn.disabled = false;
       btn.textContent = 'PDFをダウンロード';
     }
