@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登山計画書メーカー</title>
+  <meta name="description" content="登山日・山名・都道府県・行程・高低差・行動時間・消費/摂取カロリー・非常食をまとめた登山計画書を作成し、印刷・PDF保存できます。">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header no-print">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">▲</span>
+      <span>登山計画書メーカー</span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab" data-view="list" role="tab">計画一覧</button>
+      <button type="button" class="tab" data-view="edit" role="tab">編集</button>
+      <button type="button" class="tab" data-view="sheet" role="tab">計画書 / 印刷</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 一覧 -->
+    <section id="view-list" class="view no-print" hidden>
+      <div class="toolbar">
+        <h1>登山計画一覧</h1>
+        <div class="toolbar-actions">
+          <button type="button" class="btn primary" id="btn-new">＋ 新しい計画</button>
+          <button type="button" class="btn" id="btn-sample">サンプルを追加</button>
+          <button type="button" class="btn" id="btn-export">バックアップ(JSON)</button>
+          <label class="btn">
+            読み込み
+            <input type="file" id="input-import" accept="application/json" hidden>
+          </label>
+        </div>
+      </div>
+      <p class="hint">計画はこのブラウザ内（localStorage）に保存されます。別の端末へ移すときはバックアップを使ってください。</p>
+      <div id="plan-list" class="plan-list"></div>
+    </section>
+
+    <!-- 編集 -->
+    <section id="view-edit" class="view no-print" hidden>
+      <form id="plan-form" autocomplete="off">
+        <div class="toolbar">
+          <h1 id="edit-title">登山計画を編集</h1>
+          <div class="toolbar-actions">
+            <span id="save-status" class="save-status"></span>
+            <button type="button" class="btn primary" data-goto="sheet">計画書を表示</button>
+          </div>
+        </div>
+
+        <!-- 自動計算サマリー -->
+        <div class="summary" id="summary"></div>
+
+        <fieldset class="card">
+          <legend>基本情報</legend>
+          <div class="grid">
+            <label class="span-2">山の名前 <span class="req">*</span>
+              <input name="mountain" required placeholder="例：北岳">
+            </label>
+            <label>都道府県
+              <select name="prefecture" id="prefecture"></select>
+            </label>
+            <label>山行形態
+              <select name="style">
+                <option>日帰り</option>
+                <option>山小屋泊</option>
+                <option>テント泊</option>
+                <option>避難小屋泊</option>
+              </select>
+            </label>
+            <label>登山日（入山）<span class="req">*</span>
+              <input type="date" name="dateStart" required>
+            </label>
+            <label>下山予定日
+              <input type="date" name="dateEnd">
+            </label>
+            <label>予備日
+              <input type="date" name="dateReserve">
+            </label>
+            <label>山域・山系
+              <input name="area" placeholder="例：南アルプス">
+            </label>
+            <label class="span-2">登山口
+              <input name="trailhead" placeholder="例：広河原">
+            </label>
+            <label class="span-2">交通手段
+              <input name="access" placeholder="例：甲府駅からバス／マイカー（駐車場名）">
+            </label>
+            <label class="span-4">目的・コメント
+              <input name="purpose" placeholder="例：日本第2位の高峰へ。花の時期">
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>メンバー</legend>
+          <div class="table-wrap">
+            <table class="edit-table" id="members-table">
+              <thead>
+                <tr>
+                  <th>役割</th><th>氏名</th><th>年齢</th><th>性別</th><th>携帯電話</th><th>緊急連絡先（氏名・続柄）</th><th>緊急連絡先電話</th><th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn small" data-add="members">＋ メンバーを追加</button>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>行程（コースタイム）</legend>
+          <p class="hint">通過地点を順番に入力してください。標高と予定時刻から、<strong>高低差・累積標高・行動時間</strong>を自動計算します。日をまたぐ場合は「日目」を変えてください。</p>
+          <div class="table-wrap">
+            <table class="edit-table" id="route-table">
+              <thead>
+                <tr><th>日目</th><th>地点</th><th>標高(m)</th><th>予定時刻</th><th>メモ</th><th></th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn small" data-add="route">＋ 地点を追加</button>
+
+          <div class="grid mt">
+            <label>歩行距離(km)
+              <input type="number" name="distance" min="0" step="0.1" placeholder="例：12.5">
+            </label>
+            <label>累積標高 上り(m)
+              <input type="number" name="gainUp" min="0" step="1" data-auto="gainUp">
+            </label>
+            <label>累積標高 下り(m)
+              <input type="number" name="gainDown" min="0" step="1" data-auto="gainDown">
+            </label>
+            <label>行動時間(時間)
+              <input type="number" name="hours" min="0" step="0.1" data-auto="hours">
+            </label>
+          </div>
+          <p class="hint">累積標高・行動時間は空欄なら行程から自動計算した値を使います（地図アプリの値があれば上書き入力してください）。</p>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>カロリー・水分</legend>
+          <div class="grid">
+            <label>体重(kg)
+              <input type="number" name="bodyWeight" min="0" step="0.5" placeholder="例：60">
+            </label>
+            <label>荷物重量(kg)
+              <input type="number" name="packWeight" min="0" step="0.5" placeholder="例：8">
+            </label>
+            <label>持参する水(L)
+              <input type="number" name="water" min="0" step="0.1" placeholder="例：2">
+            </label>
+          </div>
+          <p class="hint">消費カロリーは山本正嘉氏の推定式<br>
+            <code>(1.8×行動時間[h] + 0.3×歩行距離[km] + 10×上り累積[km] + 0.6×下り累積[km]) × (体重+荷物重量)[kg]</code><br>
+            必要水分は <code>5 × (体重+荷物重量)[kg] × 行動時間[h]</code> mL で概算しています（1人あたり）。</p>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>食料・非常食（1人あたり）</legend>
+          <div class="table-wrap">
+            <table class="edit-table" id="foods-table">
+              <thead>
+                <tr><th>区分</th><th>品名</th><th>数量</th><th>1個あたりkcal</th><th>小計kcal</th><th></th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn small" data-add="foods">＋ 食料を追加</button>
+          <p class="hint">区分「非常食」は予定外の事態に備えるもので、計画の摂取カロリーには含めず別に集計します。</p>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>装備</legend>
+          <div class="checks" id="equipment-checks"></div>
+          <label class="mt">その他の装備
+            <input name="equipmentOther" placeholder="例：チェーンスパイク、ストック">
+          </label>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>安全対策・その他</legend>
+          <div class="grid">
+            <label class="span-4">エスケープルート
+              <textarea name="escape" rows="2" placeholder="例：悪天候時は白根御池小屋から広河原へ下山"></textarea>
+            </label>
+            <label class="span-2">計画書の提出先
+              <input name="submitTo" placeholder="例：山梨県警（コンパス経由）、家族">
+            </label>
+            <label class="span-2">山岳保険
+              <input name="insurance" placeholder="例：〇〇山岳保険 証券番号 12345">
+            </label>
+            <label class="span-4">備考
+              <textarea name="notes" rows="3"></textarea>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="form-footer">
+          <button type="button" class="btn danger" id="btn-delete">この計画を削除</button>
+          <button type="button" class="btn primary" data-goto="sheet">計画書を表示 →</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 計画書 -->
+    <section id="view-sheet" class="view" hidden>
+      <div class="toolbar no-print">
+        <h1>計画書プレビュー</h1>
+        <div class="toolbar-actions">
+          <button type="button" class="btn" data-goto="edit">← 編集に戻る</button>
+          <button type="button" class="btn" id="btn-print">印刷 / PDFとして保存</button>
+          <button type="button" class="btn primary" id="btn-pdf">PDFをダウンロード</button>
+        </div>
+      </div>
+      <p class="hint no-print">「印刷 / PDFとして保存」では印刷ダイアログの送信先で「PDFに保存」を選ぶとPDFになります。「PDFをダウンロード」はA4のPDFファイルを直接保存します。</p>
+      <article id="sheet" class="sheet"></article>
+    </section>
+  </main>
+
+  <template id="tpl-member">
+    <tr>
+      <td><select data-field="role"><option>リーダー</option><option>サブリーダー</option><option>メンバー</option></select></td>
+      <td><input data-field="name" placeholder="山田 太郎"></td>
+      <td><input data-field="age" type="number" min="0" class="w-xs"></td>
+      <td><select data-field="gender"><option></option><option>男</option><option>女</option><option>その他</option></select></td>
+      <td><input data-field="phone" type="tel" placeholder="090-0000-0000"></td>
+      <td><input data-field="emergencyName" placeholder="山田 花子（妻）"></td>
+      <td><input data-field="emergencyPhone" type="tel"></td>
+      <td><button type="button" class="icon-btn" data-remove title="削除">×</button></td>
+    </tr>
+  </template>
+
+  <template id="tpl-route">
+    <tr>
+      <td><input data-field="day" type="number" min="1" class="w-xs" value="1"></td>
+      <td><input data-field="place" placeholder="地点名"></td>
+      <td><input data-field="elevation" type="number" class="w-sm"></td>
+      <td><input data-field="time" type="time"></td>
+      <td><input data-field="note" placeholder="休憩・水場など"></td>
+      <td><button type="button" class="icon-btn" data-remove title="削除">×</button></td>
+    </tr>
+  </template>
+
+  <template id="tpl-food">
+    <tr>
+      <td><select data-field="type"><option>食事</option><option>行動食</option><option>非常食</option></select></td>
+      <td><input data-field="name" placeholder="おにぎり"></td>
+      <td><input data-field="qty" type="number" min="0" step="1" class="w-xs" value="1"></td>
+      <td><input data-field="kcal" type="number" min="0" step="1" class="w-sm"></td>
+      <td class="num" data-subtotal></td>
+      <td><button type="button" class="icon-btn" data-remove title="削除">×</button></td>
+    </tr>
+  </template>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
