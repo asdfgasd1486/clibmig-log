@@ -255,6 +255,68 @@
     return steps.find(s => range / s <= 5) || 1000;
   }
 
+  // 文字列の表示幅のおおよその見積もり（全角は1文字=fs、半角は0.6fs）
+  function textWidth(str, fs) {
+    let w = 0;
+    for (const ch of String(str)) w += ch.charCodeAt(0) > 255 ? fs : fs * 0.6;
+    return w;
+  }
+
+  // 各地点に「地点名・標高」のラベルを付ける。
+  // 重なる場合は上下を入れ替え、それでも重なるラベルは省略する（グラフに触れれば確認できる）
+  function pointLabels(pts, o) {
+    const { sx, sy, W, H, L, R, T, B, compact } = o;
+    const narrow = W < 520;
+    const fsName = compact ? 9 : narrow ? 10 : 11, fsElev = compact ? 9 : narrow ? 9 : 10, gap = 6;
+    const placed = [];
+    const hit = (a) => placed.some(b => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h);
+
+    // 障害物：点・日付ラベル（折れ線の上には文字の縁取りで重ねて読めるようにする）
+    pts.forEach(d => placed.push({ x: sx(d.x) - 5, y: sy(d.elev) - 5, w: 10, h: 10 }));
+    o.days.forEach(d => placed.push({ x: sx(d.x) + 2, y: H - B - 16, w: 34, h: 14 }));
+
+    // 同じ位置に同じ地点が重なる場合（泊まった小屋など）は1つにまとめる
+    const uniq = [];
+    pts.forEach(d => {
+      if (!uniq.some(u => Math.abs(sx(u.x) - sx(d.x)) < 1 && u.elev === d.elev && u.place === d.place)) uniq.push(d);
+    });
+    // 最高地点 → 出発・到着 → その他の順に場所を決める
+    const topElev = Math.max(...uniq.map(d => d.elev));
+    const prio = d => (d.elev === topElev ? 0 : d === uniq[0] || d === uniq[uniq.length - 1] ? 1 : 2);
+    const order = uniq.map((d, i) => ({ d, i })).sort((a, b) => prio(a.d) - prio(b.d) || a.i - b.i);
+
+    const out = [];
+    order.forEach(({ d, i }) => {
+      const name = d.place || '';
+      const elev = `${fmt(d.elev)}m`;
+      const lines = compact ? [name ? `${name} ${elev}` : elev] : (name ? [name, elev] : [elev]);
+      const fsz = compact ? [fsName] : (name ? [fsName, fsElev] : [fsElev]);
+      const w = Math.max(...lines.map((t, k) => textWidth(t, fsz[k]))) + 4;
+      const h = fsz.reduce((a, f) => a + f * 1.2, 0);
+      const px = sx(d.x), py = sy(d.elev);
+      // 谷（前後より低い地点）は下側を優先
+      const prev = uniq[i - 1], next = uniq[i + 1];
+      const valley = (!prev || prev.elev > d.elev) && (!next || next.elev > d.elev) && (prev || next);
+      const above = { y: py - gap - h }, below = { y: py + gap };
+      const cands = valley ? [below, above] : [above, below];
+      // 横位置：点の真上（中央）→ 右寄せ → 左寄せ。縦軸の目盛りには掛からないようにする
+      const clampX = x => Math.min(Math.max(x, L + 2), W - R - w + 4);
+      const xs = [...new Set([clampX(px - w / 2), clampX(px - 4), clampX(px - w + 4)])];
+      const box = cands.flatMap(c => xs.map(x => ({ x, y: c.y, w, h })))
+        .find(b => b.y >= 2 && b.y + b.h <= H - B - 2 && !hit(b));
+      if (!box) return;
+      placed.push(box);
+      let y = box.y;
+      const spans = lines.map((t, k) => {
+        y += fsz[k] * 1.05;
+        const cls = compact ? 'ep-pt-name' : (k === 0 && name ? 'ep-pt-name' : 'ep-pt-elev');
+        return `<tspan class="${cls}${d.elev === topElev ? ' top' : ''}" x="${(box.x + 2).toFixed(1)}" y="${y.toFixed(1)}" font-size="${fsz[k]}">${esc(t)}</tspan>`;
+      }).join('');
+      out.push(`<text class="ep-pt">${spans}</text>`);
+    });
+    return out.join('');
+  }
+
   // 標高グラフ（SVG文字列）。色はCSS変数 --chart-line で指定
   function profileSVG(p, width, compact) {
     const data = profileData(p);
@@ -262,14 +324,14 @@
     const { pts, timed } = data;
     const W = Math.round(Math.max(320, width || 720));
     // compact: 計画書用に縦を詰めた版（単位は見出しに表示）
-    const H = compact ? Math.round(Math.min(Math.max(W * 0.18, 110), 135)) : (W < 520 ? 210 : 240);
-    const L = compact ? 40 : 50, R = compact ? 10 : 16, T = compact ? 20 : 26, B = compact ? 20 : 34;
+    const H = compact ? Math.round(Math.min(Math.max(W * 0.2, 120), 150)) : (W < 520 ? 240 : 270);
+    // 上側は最高地点の名前・標高ラベルが入る分を空けておく
+    const L = compact ? 40 : 50, R = compact ? 10 : 16, T = compact ? 26 : 46, B = compact ? 20 : 34;
     const elevs = pts.map(d => d.elev);
     let min = Math.min(...elevs), max = Math.max(...elevs);
     const step = niceStep(Math.max(max - min, 1));
     let yMin = Math.floor(min / step) * step;
     let yMax = Math.ceil(max / step) * step;
-    if (yMax - max < step * 0.25) yMax += step; // 最高点ラベルの余白
     if (yMin === yMax) yMax += step;
     const xMax = pts[pts.length - 1].x || 1;
     const sx = v => L + (v / xMax) * (W - L - R);
@@ -296,8 +358,8 @@
       if (i > 0 && d.day !== pts[i - 1].day) {
         const xx = sx(d.x);
         days.push(`<line class="ep-day" x1="${xx}" x2="${xx}" y1="${T - 8}" y2="${H - B}"/>` +
-          // compact時は最高地点ラベルと重ならないよう、日付ラベルを下側に置く
-          `<text class="ep-daylabel" x="${xx + 4}" y="${compact ? H - B - 4 : T - 12}">${esc(d.day)}日目</text>`);
+          // 地点ラベルと重ならないよう、日付ラベルは軸のすぐ上に置く
+          `<text class="ep-daylabel" x="${xx + 4}" y="${H - B - 4}">${esc(d.day)}日目</text>`);
       }
     });
 
@@ -305,10 +367,7 @@
     const area = `${line}L${sx(xMax)},${H - B}L${sx(0)},${H - B}Z`;
     const dots = pts.map(d => `<circle class="ep-dot" cx="${sx(d.x)}" cy="${sy(d.elev)}" r="4"/>`).join('');
 
-    const top = pts.reduce((a, b) => (b.elev > a.elev ? b : a));
-    const tx = sx(top.x);
-    const anchor = tx < L + 80 ? 'start' : tx > W - R - 80 ? 'end' : 'middle';
-    const topLabel = `<text class="ep-label" x="${tx}" y="${sy(top.elev) - 10}" text-anchor="${anchor}">${esc(top.place)} ${fmt(top.elev)}m</text>`;
+    const labels = pointLabels(pts, { sx, sy, W, H, L, R, T, B, compact, days: pts.filter((d, i) => i > 0 && d.day !== pts[i - 1].day) });
 
     const hover = pts.map(d => ({ x: sx(d.x), y: sy(d.elev), place: d.place, elev: d.elev, time: d.time, day: d.day }));
 
@@ -322,7 +381,7 @@
       <path class="ep-area" d="${area}"/>
       <path class="ep-line" d="${line}"/>
       ${dots}
-      ${topLabel}
+      ${labels}
       <line class="ep-cross" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
       <circle class="ep-focus" r="6" visibility="hidden"/>
     </svg><div class="ep-tip" hidden></div>`;
