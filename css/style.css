@@ -245,7 +245,10 @@ input[type=time]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 .ep-line { fill: none; stroke: var(--chart-line); stroke-width: 2; stroke-linejoin: round; }
 .ep-dot { fill: var(--chart-line); stroke: var(--chart-surface); stroke-width: 2; }
 .ep-focus { fill: var(--chart-line); stroke: var(--chart-surface); stroke-width: 2; }
-.ep-label { fill: currentColor; font-size: 12px; font-weight: 700; }
+.ep-pt { paint-order: stroke; stroke: var(--chart-surface); stroke-width: 3px; stroke-linejoin: round; }
+.ep-pt-name { fill: currentColor; }
+.ep-pt-name.top { font-weight: 700; }
+.ep-pt-elev { fill: var(--chart-ink); font-variant-numeric: tabular-nums; }
 .ep-day { stroke: var(--chart-ink); stroke-width: 1; stroke-dasharray: 3 3; }
 .ep-daylabel { fill: var(--chart-ink); font-size: 11px; }
 .ep-cross { stroke: var(--chart-ink); stroke-width: 1; }
